@@ -1,0 +1,14 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ks-upgrade
+spec:
+  template:
+    spec:
+      serviceAccountName: ks-installer
+      containers:
+        - name: ks-upgrade
+          image: kubespheredev/ks-upgrade:latest
+          command: ["/ks-upgrade"]
+      restartPolicy: Never
+  backoffLimit: 4
