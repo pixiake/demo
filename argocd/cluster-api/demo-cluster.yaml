@@ -27,8 +27,6 @@ metadata:
   name: demo
   namespace: default
 spec:
-  component:
-    zone: cn
   controlPlaneLoadBalancer:
     host: 192.168.6.100
   nodes:
