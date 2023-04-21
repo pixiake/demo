@@ -1,0 +1,194 @@
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: demo
+  namespace: default
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+      - 10.233.64.0/18
+    serviceDomain: cluster.local
+    services:
+      cidrBlocks:
+      - 10.233.0.0/18
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: KubeadmControlPlane
+    name: demo-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: KKCluster
+    name: demo
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: KKCluster
+metadata:
+  name: demo
+  namespace: default
+spec:
+  component:
+    zone: cn
+  controlPlaneLoadBalancer:
+    host: 192.168.6.100
+  nodes:
+    auth:
+      password: Qcloud@123
+      user: ubuntu
+    instances:
+      - 192.168.6.4
+      - 192.168.6.5
+      - 192.168.6.6
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: demo-control-plane
+  namespace: default
+spec:
+  kubeadmConfigSpec:
+    files:
+    - content: |
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          creationTimestamp: null
+          name: kube-vip
+          namespace: kube-system
+        spec:
+          containers:
+          - args:
+            - manager
+            env:
+            - name: address
+              value: 192.168.6.3
+            - name: vip_interface
+              value: ""
+            - name: vip_arp
+              value: "true"
+            - name: port
+              value: "6443"
+            - name: vip_cidr
+              value: "32"
+            - name: cp_enable
+              value: "true"
+            - name: cp_namespace
+              value: kube-system
+            - name: vip_ddns
+              value: "false"
+            - name: svc_enable
+              value: "true"
+            - name: vip_leaderelection
+              value: "true"
+            - name: vip_leaseduration
+              value: "5"
+            - name: vip_renewdeadline
+              value: "3"
+            - name: vip_retryperiod
+              value: "1"
+            - name: lb_enable
+              value: "true"
+            - name: lb_port
+              value: "6443"
+            image: ghcr.io/kube-vip/kube-vip:v0.5.0
+            imagePullPolicy: IfNotPresent
+            name: kube-vip
+            resources: {}
+            securityContext:
+              capabilities:
+                add:
+                - NET_ADMIN
+                - NET_RAW
+            volumeMounts:
+            - mountPath: /etc/kubernetes/admin.conf
+              name: kubeconfig
+          hostNetwork: true
+          hostAliases:
+            - hostnames:
+                - kubernetes
+              ip: 127.0.0.1
+          volumes:
+          - hostPath:
+              path: /etc/kubernetes/admin.conf
+              type: FileOrCreate
+            name: kubeconfig
+        status: {}
+      owner: root:root
+      path: /etc/kubernetes/manifests/kube-vip.yaml
+    initConfiguration:
+      nodeRegistration:
+        criSocket: unix:///var/run/containerd/containerd.sock
+    joinConfiguration:
+      nodeRegistration:
+        criSocket: unix:///var/run/containerd/containerd.sock
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: KKMachineTemplate
+      name: demo-control-plane
+  replicas: 1
+  version: v1.14.6
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: KKMachineTemplate
+metadata:
+  name: demo-control-plane
+  namespace: default
+spec:
+  template:
+    spec:
+      repository:
+        iso: none
+        update: false
+      roles:
+      - control-plane
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: demo-md-0
+  namespace: default
+spec:
+  clusterName: demo
+  replicas: 1
+  selector:
+    matchLabels: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          name: demo-md-0
+      clusterName: demo
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: KKMachineTemplate
+        name: demo-md-0
+      version: v1.14.6
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: KKMachineTemplate
+metadata:
+  name: demo-md-0
+  namespace: default
+spec:
+  template:
+    spec:
+      repository:
+        iso: none
+        update: false
+      roles:
+      - worker
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
+metadata:
+  name: demo-md-0
+  namespace: default
+spec:
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          criSocket: unix:///var/run/containerd/containerd.sock
